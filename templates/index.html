@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nifty 50 VWAP + EMA Scalp Backtester</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>📊 Nifty 50 VWAP + EMA Scalp Backtester</h1>
+            <p class="subtitle">5-minute intraday strategy testing</p>
+        </header>
+
+        <nav class="app-nav">
+            <a href="#" id="nav-backtester" class="nav-link active-app">📊 Backtester</a>
+            <span class="nav-separator">|</span>
+            <a href="#" id="nav-options" class="nav-link">🎯 Options Tool</a>
+        </nav>
+
+        <div id="cloud-warning" class="cloud-warning" style="display:none;">
+            ☁️ <strong>Cloud mode:</strong> downloaded data resets after server restart. Click "Refresh Data" after restart. Paper trades may reset too unless exported.
+        </div>
+
+        <!-- Data Status Banner -->
+        <div id="status-banner" class="status-banner">
+            <span id="status-text">Loading data status...</span>
+            <button id="refresh-btn" class="btn btn-secondary btn-sm">🔄 Refresh Data</button>
+        </div>
+
+        <!-- Section 0: TradingView Data Fetching -->
+        <section class="data-fetch-section">
+            <h2>📡 TradingView Data Fetching</h2>
+            <div class="data-fetch-grid">
+                <div class="form-group">
+                    <label for="tv_username">TradingView Username</label>
+                    <input type="text" id="tv_username" placeholder="Optional - for premium access" value="">
+                </div>
+                <div class="form-group">
+                    <label for="tv_password">TradingView Password</label>
+                    <input type="password" id="tv_password" placeholder="Optional - for premium access" value="">
+                </div>
+                <div class="form-group">
+                    <label for="tv_n_bars">Number of Bars</label>
+                    <input type="number" id="tv_n_bars" value="500" min="100" max="5000" step="100">
+                </div>
+                <div class="form-group">
+                    <label for="tv_interval">Interval</label>
+                    <select id="tv_interval">
+                        <option value="5">5 minutes</option>
+                        <option value="15">15 minutes</option>
+                        <option value="30">30 minutes</option>
+                        <option value="60">1 hour</option>
+                    </select>
+                </div>
+            </div>
+            <div class="data-fetch-actions">
+                <button id="fetch-tv-data-btn" class="btn btn-success">📡 Fetch from TradingView</button>
+                <div id="tv-fetch-status" class="tv-fetch-status"></div>
+            </div>
+        </section>
+
+        <!-- Section: Live Market Signal Generator -->
+        <section class="live-signal-section">
+            <h2>🔴 Live Market Signal Generator</h2>
+            
+            <div class="live-control-panel">
+                <div class="api-key-input">
+                    <label for="groww-api-token">Groww API Token</label>
+                    <input type="password" id="groww-api-token" placeholder="Enter your Groww API token" class="full-width">
+                    <small>Your token is stored locally only. <a href="https://groww.in" target="_blank">Get token from Groww API</a></small>
+                </div>
+                
+                <div class="live-control-buttons">
+                    <button id="start-live-monitor-btn" class="btn btn-success">▶️ Start Live Monitor (5min)</button>
+                    <button id="stop-live-monitor-btn" class="btn btn-danger hidden">⏹️ Stop Live Monitor</button>
+                    <span id="monitor-timer" class="monitor-timer hidden">Next refresh: --:--</span>
+                </div>
+            </div>
+
+            <div id="live-signal-container" class="live-signal-container hidden">
+                <!-- Signal Badge -->
+                <div class="signal-badge-wrapper">
+                    <div id="signal-badge" class="signal-badge signal-off">
+                        <div class="badge-content">
+                            <div class="signal-type">WAITING</div>
+                            <div class="signal-price">₹--</div>
+                        </div>
+                    </div>
+                    <div class="signal-metadata">
+                        <p><strong>Market Status:</strong> <span id="market-status" class="market-open">🟢 OPEN</span></p>
+                        <p><strong>Regime:</strong> <span id="market-regime" class="regime-neutral">--</span></p>
+                        <p><strong>Last Updated:</strong> <span id="last-updated-time">--:--:--</span></p>
+                        <p id="signal-reason" class="signal-reason">Waiting for live data...</p>
+                    </div>
+                </div>
+
+                <!-- Trade Levels Card -->
+                <div class="trade-levels-card">
+                    <h3>📊 Trade Parameters</h3>
+                    <div class="trade-levels-grid">
+                        <div class="trade-level entry">
+                            <span class="level-label">Entry</span>
+                            <span class="level-value" id="entry-price">--</span>
+                        </div>
+                        <div class="trade-level stop">
+                            <span class="level-label">Stop Loss</span>
+                            <span class="level-value" id="stop-price">--</span>
+                        </div>
+                        <div class="trade-level target">
+                            <span class="level-label">Target</span>
+                            <span class="level-value" id="target-price">--</span>
+                        </div>
+                        <div class="trade-level current">
+                            <span class="level-label">Live Price</span>
+                            <span class="level-value" id="live-price">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Indicators Panel -->
+                <div class="indicators-panel">
+                    <h3>📈 Live Indicators</h3>
+                    <div class="indicators-grid">
+                        <div class="indicator-gauge">
+                            <div class="gauge-label">EMA 9</div>
+                            <div class="gauge-value" id="ema9-value">--</div>
+                        </div>
+                        <div class="indicator-gauge">
+                            <div class="gauge-label">EMA 21</div>
+                            <div class="gauge-value" id="ema21-value">--</div>
+                        </div>
+                        <div class="indicator-gauge">
+                            <div class="gauge-label">EMA 50</div>
+                            <div class="gauge-value" id="ema50-value">--</div>
+                        </div>
+                        <div class="indicator-gauge">
+                            <div class="gauge-label">VWAP</div>
+                            <div class="gauge-value" id="vwap-value">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conditions Checklist -->
+                <div class="conditions-panel">
+                    <h3>✅ Signal Conditions</h3>
+                    <div id="conditions-list" class="conditions-list">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+
+                <!-- Signal Log -->
+                <div class="signal-log-panel">
+                    <h3>📋 Signal History (Last 20)</h3>
+                    <div id="signal-log" class="signal-log">
+                        <p class="log-empty">No signals yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="live-monitor-loading" class="loading-spinner hidden">
+                <div class="spinner"></div>
+                <p>Fetching live signal data...</p>
+            </div>
+        </section>
+
+        <!-- Section 1: Configuration Panel -->
+        <section class="config-section">
+            <h2>⚙️ Strategy Configuration</h2>
+            <div class="config-grid">
+                <div class="form-group">
+                    <label for="stop_loss_points">Stop Loss (pts)</label>
+                    <input type="number" id="stop_loss_points" value="20" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label for="rr_ratio">R:R Ratio</label>
+                    <input type="number" id="rr_ratio" value="2.0" step="0.1" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="ema_pullback_pct">EMA Pullback %</label>
+                    <input type="number" id="ema_pullback_pct" value="0.15" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="max_trades_per_day">Max Trades/Day</label>
+                    <input type="number" id="max_trades_per_day" value="3" min="1" max="10">
+                </div>
+                <div class="form-group">
+                    <label for="daily_loss_limit_pct">Daily Loss Limit %</label>
+                    <input type="number" id="daily_loss_limit_pct" value="2.0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="initial_capital">Initial Capital (₹)</label>
+                    <input type="number" id="initial_capital" value="500000" step="10000">
+                </div>
+                <div class="form-group">
+                    <label for="lot_size">Lot Size</label>
+                    <input type="number" id="lot_size" value="50" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="brokerage_per_trade">Brokerage/Trade (₹)</label>
+                    <input type="number" id="brokerage_per_trade" value="40" step="1">
+                </div>
+                <div class="form-group">
+                    <label for="regime_sma_period">Regime SMA Period</label>
+                    <select id="regime_sma_period">
+                        <option value="3">3-day (Loose)</option>
+                        <option value="5" selected>5-day (Baseline)</option>
+                        <option value="8">8-day (Strict)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="end_date">Date Range End (YYYY-MM-DD)</label>
+                    <input type="text" id="end_date" placeholder="Leave blank for today" value="">
+                </div>
+            </div>
+            <div class="config-actions">
+                <button id="run-backtest-btn" class="btn btn-primary btn-lg">🚀 Run Backtest</button>
+            </div>
+        </section>
+
+        <!-- Loading Spinner -->
+        <div id="loading-spinner" class="loading-spinner hidden">
+            <div class="spinner"></div>
+            <p>Running backtest...</p>
+        </div>
+
+        <!-- Section 2: Metrics Summary -->
+        <section id="metrics-section" class="metrics-section hidden">
+            <h2>📈 Performance Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Win Rate</div>
+                    <div class="metric-value" id="metric-win-rate">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total Trades</div>
+                    <div class="metric-value" id="metric-total-trades">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Profit Factor</div>
+                    <div class="metric-value" id="metric-profit-factor">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Expectancy (pts)</div>
+                    <div class="metric-value" id="metric-expectancy">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Max Drawdown</div>
+                    <div class="metric-value" id="metric-max-drawdown">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total Return %</div>
+                    <div class="metric-value" id="metric-total-return">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total P&L (₹)</div>
+                    <div class="metric-value" id="metric-total-pnl">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Sharpe Ratio</div>
+                    <div class="metric-value" id="metric-sharpe">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Avg Daily P&L</div>
+                    <div class="metric-value" id="metric-avg-daily">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Max Consecutive Wins</div>
+                    <div class="metric-value" id="metric-max-wins">-</div>
+                </div>
+            </div>
+            <div id="regime-info" class="regime-tag"></div>
+        </section>
+
+        <!-- Section 3: Charts (Tabbed) -->
+        <section id="charts-section" class="charts-section hidden">
+            <h2>📊 Analysis Charts</h2>
+            
+            <div class="tabs">
+                <button class="tab-button active" data-tab="equity-chart">Equity Curve</button>
+                <button class="tab-button" data-tab="pnl-dist-chart">Trade P&L Distribution</button>
+                <button class="tab-button" data-tab="monthly-chart">Monthly P&L</button>
+                <button class="tab-button" data-tab="trade-log-tab">Trade Log</button>
+            </div>
+
+            <!-- Tab 1: Equity Curve -->
+            <div id="equity-chart" class="tab-content active">
+                <div id="equity-chart-container" class="chart-container"></div>
+            </div>
+
+            <!-- Tab 2: Trade P&L Distribution -->
+            <div id="pnl-dist-chart" class="tab-content">
+                <div id="pnl-dist-container" class="chart-container"></div>
+            </div>
+
+            <!-- Tab 3: Monthly P&L -->
+            <div id="monthly-chart" class="tab-content">
+                <div id="monthly-pnl-container" class="chart-container"></div>
+            </div>
+
+            <!-- Tab 4: Trade Log -->
+            <div id="trade-log-tab" class="tab-content">
+                <div class="trade-log-actions">
+                    <button id="download-csv-btn" class="btn btn-secondary">⬇️ Download as CSV</button>
+                </div>
+                <div id="trade-log-container" class="trade-log-container">
+                    <table class="trade-log-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Dir</th>
+                                <th>Entry</th>
+                                <th>SL</th>
+                                <th>Target</th>
+                                <th>Exit</th>
+                                <th>Reason</th>
+                                <th>P&L (pts)</th>
+                                <th>P&L (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trade-log-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>💡 Tip: For data older than 60 days, please use a broker CSV upload (coming soon)</p>
+        </footer>
+    </div>
+
+    <script>
+        // Global state
+        let lastMetrics = null;
+        let lastTradeLog = null;
+        let lastEquityCurve = null;
+        let lastMonthlyPnl = null;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDataStatus();
+            setupEventListeners();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('run-backtest-btn').addEventListener('click', runBacktest);
+            document.getElementById('refresh-btn').addEventListener('click', refreshData);
+            document.getElementById('download-csv-btn').addEventListener('click', downloadCSV);
+            document.getElementById('fetch-tv-data-btn').addEventListener('click', fetchTradingViewData);
+
+            // Tab switching
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    const tabName = this.getAttribute('data-tab');
+                    switchTab(tabName);
+                });
+            });
+        }
+
+        // Load and display data status
+        async function loadDataStatus() {
+            try {
+                const response = await fetch('/api/data-status');
+                const data = await response.json();
+                
+                if (data.data_exists && data.date_range) {
+                    const [startDate, endDate] = data.date_range;
+                    const source = data.data_source === 'tradingview' ? '📡 TradingView' : '📊 yfinance';
+                    document.getElementById('status-text').textContent = 
+                        `✅ Data available: ${startDate} to ${endDate} (${data.trading_days} trading days) - Source: ${source}`;
+                    document.getElementById('status-banner').classList.add('status-success');
+                } else {
+                    document.getElementById('status-text').textContent = 
+                        '⚠️ No data available. Please refresh to download.';
+                    document.getElementById('status-banner').classList.add('status-warning');
+                }
+            } catch (error) {
+                console.error('Error loading data status:', error);
+                document.getElementById('status-text').textContent = '❌ Error loading data status';
+            }
+        }
+
+        // Fetch data from TradingView
+        async function fetchTradingViewData() {
+            const btn = document.getElementById('fetch-tv-data-btn');
+            const status = document.getElementById('tv-fetch-status');
+            
+            // Get form values
+            const username = document.getElementById('tv_username').value.trim();
+            const password = document.getElementById('tv_password').value.trim();
+            const nBars = parseInt(document.getElementById('tv_n_bars').value);
+            const interval = parseInt(document.getElementById('tv_interval').value);
+            
+            // Disable button and show loading
+            btn.disabled = true;
+            btn.textContent = '⏳ Fetching...';
+            status.textContent = 'Connecting to TradingView...';
+            status.className = 'tv-fetch-status loading';
+            
+            try {
+                // Prepare payload
+                const payload = {
+                    username: username || null,
+                    password: password || null,
+                    n_bars: nBars,
+                    interval_minutes: interval
+                };
+                
+                // Call API
+                const response = await fetch('/api/fetch-tradingview-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to fetch TradingView data');
+                }
+                
+                const result = await response.json();
+                
+                // Success
+                status.textContent = `✅ Success! Fetched ${result.candles_count} candles (${result.date_range})`;
+                status.className = 'tv-fetch-status success';
+                
+                // Refresh data status to show new data
+                loadDataStatus();
+                
+                // Show success message
+                alert(`✅ TradingView data fetched successfully!\n\n` +
+                      `📊 ${result.candles_count} candles\n` +
+                      `📅 ${result.date_range}\n` +
+                      `💾 Saved to: ${result.file_path}\n\n` +
+                      `You can now run backtests with this data!`);
+                
+            } catch (error) {
+                console.error('Error fetching TradingView data:', error);
+                status.textContent = `❌ Error: ${error.message}`;
+                status.className = 'tv-fetch-status error';
+                alert('❌ Failed to fetch TradingView data: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📡 Fetch from TradingView';
+            }
+        }
+
+        // Refresh data from yfinance
+        async function refreshData() {
+            document.getElementById('refresh-btn').disabled = true;
+            document.getElementById('refresh-btn').textContent = '⏳ Refreshing...';
+            
+            try {
+                const endDate = document.getElementById('end_date').value.trim() || null;
+                
+                const payload = {};
+                if (endDate) {
+                    payload.end_date = endDate;
+                }
+                
+                const response = await fetch('/api/refresh-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadDataStatus();
+                    alert('✅ Data refreshed successfully!');
+                } else {
+                    alert('❌ Error refreshing data: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+                alert('❌ Error refreshing data');
+            } finally {
+                document.getElementById('refresh-btn').disabled = false;
+                document.getElementById('refresh-btn').textContent = '🔄 Refresh Data';
+            }
+        }
+
+        // Run backtest
+        async function runBacktest() {
+            // Show loading spinner
+            document.getElementById('loading-spinner').classList.remove('hidden');
+            document.getElementById('metrics-section').classList.add('hidden');
+            document.getElementById('charts-section').classList.add('hidden');
+
+            try {
+                // Collect parameters from form
+                const params = {
+                    stop_loss_points: parseFloat(document.getElementById('stop_loss_points').value),
+                    rr_ratio: parseFloat(document.getElementById('rr_ratio').value),
+                    ema_pullback_pct: parseFloat(document.getElementById('ema_pullback_pct').value),
+                    max_trades_per_day: parseInt(document.getElementById('max_trades_per_day').value),
+                    daily_loss_limit_pct: parseFloat(document.getElementById('daily_loss_limit_pct').value),
+                    initial_capital: parseFloat(document.getElementById('initial_capital').value),
+                    lot_size: parseInt(document.getElementById('lot_size').value),
+                    brokerage_per_trade: parseFloat(document.getElementById('brokerage_per_trade').value),
+                    regime_sma_period: parseInt(document.getElementById('regime_sma_period').value),
+                    end_date: document.getElementById('end_date').value.trim() || null
+                };
+
+                // Call API
+                const response = await fetch('/api/run-backtest', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Backtest failed');
+                }
+
+                const result = await response.json();
+
+                // Store results
+                lastMetrics = result.metrics;
+                lastTradeLog = result.trades;
+                lastEquityCurve = result.equity_curve;
+                lastMonthlyPnl = result.monthly_pnl;
+
+                // Update regime info
+                document.getElementById('regime-info').textContent =
+                    `Results above used Regime SMA-${params.regime_sma_period} filter`;
+
+                // Display results
+                displayMetrics(result.metrics);
+                displayCharts(result);
+
+                // Show sections
+                document.getElementById('metrics-section').classList.remove('hidden');
+                document.getElementById('charts-section').classList.remove('hidden');
+
+            } catch (error) {
+                console.error('Error running backtest:', error);
+                alert('❌ Backtest error: ' + error.message);
+            } finally {
+                document.getElementById('loading-spinner').classList.add('hidden');
+            }
+        }
+
+        // Display metrics
+        function displayMetrics(metrics) {
+            document.getElementById('metric-win-rate').textContent = 
+                metrics.win_rate_pct.toFixed(1) + '%';
+            document.getElementById('metric-win-rate').style.color = 
+                metrics.win_rate_pct >= 50 ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('metric-total-trades').textContent = 
+                metrics.total_trades;
+            
+            document.getElementById('metric-profit-factor').textContent = 
+                metrics.profit_factor.toFixed(2);
+            document.getElementById('metric-profit-factor').style.color = 
+                metrics.profit_factor >= 1.5 ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('metric-expectancy').textContent = 
+                metrics.expectancy_points.toFixed(2);
+            document.getElementById('metric-expectancy').style.color = 
+                metrics.expectancy_points > 0 ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('metric-max-drawdown').textContent = 
+                '₹' + formatNumber(Math.abs(metrics.max_drawdown_inr)) + 
+                ' (' + metrics.max_drawdown_pct.toFixed(2) + '%)';
+            document.getElementById('metric-max-drawdown').style.color = 
+                metrics.max_drawdown_inr <= 0 ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('metric-total-return').textContent = 
+                metrics.total_return_pct.toFixed(2) + '%';
+            document.getElementById('metric-total-return').style.color = 
+                metrics.total_return_pct >= 0 ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('metric-total-pnl').textContent = 
+                '₹' + formatNumber(metrics.total_pnl_inr);
+            document.getElementById('metric-total-pnl').style.color = 
+                metrics.total_pnl_inr >= 0 ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('metric-sharpe').textContent = 
+                metrics.sharpe_ratio.toFixed(2);
+            document.getElementById('metric-sharpe').style.color = 
+                metrics.sharpe_ratio > 0 ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('metric-avg-daily').textContent = 
+                '₹' + formatNumber(metrics.avg_daily_pnl_inr);
+            document.getElementById('metric-avg-daily').style.color = 
+                metrics.avg_daily_pnl_inr >= 0 ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('metric-max-wins').textContent = 
+                metrics.max_consecutive_wins;
+        }
+
+        // Display charts
+        function displayCharts(result) {
+            // Chart 1: Equity Curve
+            if (result.equity_curve && result.equity_curve.length > 0) {
+                plotEquityCurve(result.equity_curve, result.metrics.total_return_pct);
+            }
+
+            // Chart 2: Trade P&L Distribution
+            if (result.trades && result.trades.length > 0) {
+                plotPnlDistribution(result.trades);
+            }
+
+            // Chart 3: Monthly P&L
+            if (result.monthly_pnl && Object.keys(result.monthly_pnl).length > 0) {
+                plotMonthlyPnl(result.monthly_pnl);
+            }
+
+            // Chart 4: Trade Log
+            if (result.trades && result.trades.length > 0) {
+                displayTradeLog(result.trades);
+            }
+        }
+
+        // Plot equity curve
+        function plotEquityCurve(equityCurve, totalReturn) {
+            const initialCapital = equityCurve[0][1];
+            
+            const timestamps = equityCurve.map(point => new Date(point[0]));
+            const capitals = equityCurve.map(point => point[1]);
+
+            const trace = {
+                x: timestamps,
+                y: capitals,
+                fill: 'tozeroy',
+                type: 'scatter',
+                line: { color: '#3498db', width: 2 },
+                fillcolor: 'rgba(52, 152, 219, 0.2)',
+                hovertemplate: '<b>Capital: ₹%{y:,.0f}</b><br>Date: %{x}<extra></extra>'
+            };
+
+            const layout = {
+                title: 'Equity Curve (Running Capital)',
+                xaxis: { title: 'Date' },
+                yaxis: { title: 'Capital (₹)' },
+                hovermode: 'x unified',
+                plot_bgcolor: '#1a1a1a',
+                paper_bgcolor: '#0d0d0d',
+                font: { color: '#fff' },
+                margin: { l: 60, r: 40, t: 40, b: 60 }
+            };
+
+            Plotly.newPlot('equity-chart-container', [trace], layout, { responsive: true });
+        }
+
+        // Plot P&L distribution
+        function plotPnlDistribution(trades) {
+            const pnlPoints = trades.map(t => t.pnl_points);
+            
+            // Create histogram
+            const trace = {
+                x: pnlPoints,
+                type: 'histogram',
+                marker: {
+                    color: pnlPoints.map(p => p >= 0 ? '#2ecc71' : '#e74c3c')
+                },
+                nbinsx: 20,
+                hovertemplate: 'P&L Range: %{x}<br>Count: %{y}<extra></extra>'
+            };
+
+            const layout = {
+                title: 'Trade P&L Distribution (Points)',
+                xaxis: { title: 'P&L (Points)' },
+                yaxis: { title: 'Number of Trades' },
+                hovermode: 'x unified',
+                plot_bgcolor: '#1a1a1a',
+                paper_bgcolor: '#0d0d0d',
+                font: { color: '#fff' },
+                margin: { l: 60, r: 40, t: 40, b: 60 }
+            };
+
+            Plotly.newPlot('pnl-dist-container', [trace], layout, { responsive: true });
+        }
+
+        // Plot monthly P&L
+        function plotMonthlyPnl(monthlyPnl) {
+            const months = Object.keys(monthlyPnl).sort();
+            const pnlValues = months.map(m => monthlyPnl[m].pnl_inr);
+
+            const trace = {
+                x: months,
+                y: pnlValues,
+                type: 'bar',
+                marker: {
+                    color: pnlValues.map(p => p >= 0 ? '#2ecc71' : '#e74c3c')
+                },
+                hovertemplate: '<b>%{x}</b><br>P&L: ₹%{y:,.0f}<extra></extra>'
+            };
+
+            const layout = {
+                title: 'Monthly P&L',
+                xaxis: { title: 'Month' },
+                yaxis: { title: 'P&L (₹)' },
+                hovermode: 'x',
+                plot_bgcolor: '#1a1a1a',
+                paper_bgcolor: '#0d0d0d',
+                font: { color: '#fff' },
+                margin: { l: 60, r: 40, t: 40, b: 60 }
+            };
+
+            Plotly.newPlot('monthly-pnl-container', [trace], layout, { responsive: true });
+        }
+
+        // Display trade log table
+        function displayTradeLog(trades) {
+            const tbody = document.getElementById('trade-log-tbody');
+            tbody.innerHTML = '';
+
+            trades.forEach(trade => {
+                const row = document.createElement('tr');
+                
+                // Color code based on P&L
+                if (trade.pnl_inr > 0) {
+                    row.style.backgroundColor = 'rgba(46, 204, 113, 0.15)';
+                } else if (trade.pnl_inr < 0) {
+                    row.style.backgroundColor = 'rgba(231, 76, 60, 0.15)';
+                } else {
+                    row.style.backgroundColor = 'rgba(149, 165, 166, 0.1)';
+                }
+
+                row.innerHTML = `
+                    <td>${trade.date}</td>
+                    <td>${trade.time}</td>
+                    <td><strong>${trade.direction}</strong></td>
+                    <td>${trade.entry_price.toFixed(2)}</td>
+                    <td>${trade.sl.toFixed(2)}</td>
+                    <td>${trade.target.toFixed(2)}</td>
+                    <td>${trade.exit_price.toFixed(2)}</td>
+                    <td>${trade.reason}</td>
+                    <td style="color: ${trade.pnl_points >= 0 ? '#2ecc71' : '#e74c3c'}">${trade.pnl_points.toFixed(2)}</td>
+                    <td style="color: ${trade.pnl_inr >= 0 ? '#2ecc71' : '#e74c3c'}">₹${formatNumber(trade.pnl_inr)}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        // Switch between tabs
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            // Trigger Plotly resize for charts
+            setTimeout(() => {
+                Plotly.Plots.resize('equity-chart-container');
+                Plotly.Plots.resize('pnl-dist-container');
+                Plotly.Plots.resize('monthly-pnl-container');
+            }, 100);
+        }
+
+        // Download trade log as CSV
+        async function downloadCSV() {
+            try {
+                const response = await fetch('/api/download-trades');
+                const csv = await response.text();
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'nifty_backtest_trades.csv';
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Error downloading CSV:', error);
+                alert('❌ Error downloading CSV');
+            }
+        }
+
+        // Utility function to format large numbers
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(2) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(2) + 'K';
+            }
+            return num.toFixed(2);
+        }
+
+        /* ===== LIVE SIGNAL FUNCTIONS ===== */
+        
+        // Live signal state
+        let liveMonitorActive = false;
+        let liveMonitorInterval = null;
+        let signalLog = [];
+        let refreshCountdown = 0;
+        let countdownInterval = null;
+
+        // Initialize live signal event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            const startBtn = document.getElementById('start-live-monitor-btn');
+            const stopBtn = document.getElementById('stop-live-monitor-btn');
+            
+            if (startBtn) startBtn.addEventListener('click', startLiveMonitor);
+            if (stopBtn) stopBtn.addEventListener('click', stopLiveMonitor);
+        });
+
+        // Start live monitor
+        async function startLiveMonitor() {
+            const token = document.getElementById('groww-api-token').value.trim();
+            
+            if (!token) {
+                alert('⚠️ Please enter your Groww API token');
+                return;
+            }
+
+            // Get strategy parameters
+            const params = {
+                stop_loss_points: parseFloat(document.getElementById('stop_loss_points').value),
+                rr_ratio: parseFloat(document.getElementById('rr_ratio').value),
+                ema_pullback_pct: parseFloat(document.getElementById('ema_pullback_pct').value)
+            };
+
+            // Update UI
+            liveMonitorActive = true;
+            document.getElementById('start-live-monitor-btn').classList.add('hidden');
+            document.getElementById('stop-live-monitor-btn').classList.remove('hidden');
+            document.getElementById('live-signal-container').classList.remove('hidden');
+            document.getElementById('monitor-timer').classList.remove('hidden');
+
+            // Fetch immediately
+            await fetchLiveSignal(token, params);
+
+            // Set up interval for 5-minute refresh
+            refreshCountdown = 300; // 5 minutes = 300 seconds
+            startCountdown();
+            
+            liveMonitorInterval = setInterval(() => {
+                refreshCountdown = 300;
+                startCountdown();
+                fetchLiveSignal(token, params);
+            }, 5 * 60 * 1000); // 5 minutes
+        }
+
+        // Stop live monitor
+        function stopLiveMonitor() {
+            liveMonitorActive = false;
+            
+            // Clear intervals
+            if (liveMonitorInterval) clearInterval(liveMonitorInterval);
+            if (countdownInterval) clearInterval(countdownInterval);
+
+            // Update UI
+            document.getElementById('start-live-monitor-btn').classList.remove('hidden');
+            document.getElementById('stop-live-monitor-btn').classList.add('hidden');
+            document.getElementById('live-signal-container').classList.add('hidden');
+            document.getElementById('monitor-timer').classList.add('hidden');
+
+            console.log('Live monitor stopped');
+        }
+
+        // Start countdown timer
+        function startCountdown() {
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            countdownInterval = setInterval(() => {
+                refreshCountdown--;
+                
+                const minutes = Math.floor(refreshCountdown / 60);
+                const seconds = refreshCountdown % 60;
+                const timerDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                
+                const timerElement = document.getElementById('monitor-timer');
+                if (timerElement) {
+                    timerElement.textContent = `Next refresh: ${timerDisplay}`;
+                }
+
+                if (refreshCountdown <= 0) {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+        }
+
+        // Fetch live signal from API
+        async function fetchLiveSignal(token, params) {
+            const loadingDiv = document.getElementById('live-monitor-loading');
+            if (loadingDiv) loadingDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/live-signal', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        api_token: token,
+                        stop_loss_points: params.stop_loss_points,
+                        rr_ratio: params.rr_ratio,
+                        ema_pullback_pct: params.ema_pullback_pct
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to fetch live signal');
+                }
+
+                const result = await response.json();
+                
+                // Update UI with signal data
+                updateSignalDisplay(result);
+                
+                // Add to signal log
+                addToSignalLog(result);
+
+                if (loadingDiv) loadingDiv.classList.add('hidden');
+
+            } catch (error) {
+                console.error('Error fetching live signal:', error);
+                
+                const badgeElement = document.getElementById('signal-badge');
+                if (badgeElement) {
+                    badgeElement.className = 'signal-badge signal-off';
+                }
+                
+                const reasonElement = document.getElementById('signal-reason');
+                if (reasonElement) {
+                    reasonElement.textContent = `❌ Error: ${error.message}`;
+                }
+
+                if (loadingDiv) loadingDiv.classList.add('hidden');
+            }
+        }
+
+        // Update signal display with live data
+        function updateSignalDisplay(data) {
+            // Update signal badge
+            const badgeElement = document.getElementById('signal-badge');
+            let signalClass = 'signal-off';
+            let signalType = 'WAITING';
+            let badgePrice = '₹--';
+
+            if (data.signal === 'LONG') {
+                signalClass = 'signal-long';
+                signalType = 'LONG ↑';
+                badgePrice = `₹${data.entry_price.toFixed(2)}`;
+            } else if (data.signal === 'SHORT') {
+                signalClass = 'signal-short';
+                signalType = 'SHORT ↓';
+                badgePrice = `₹${data.entry_price.toFixed(2)}`;
+            } else if (data.signal === 'WAIT') {
+                signalClass = 'signal-wait';
+                signalType = 'WAITING';
+                badgePrice = `₹${data.live_price?.toFixed(2) || '--'}`;
+            }
+
+            badgeElement.className = `signal-badge ${signalClass}`;
+            document.querySelector('.signal-type').textContent = signalType;
+            document.querySelector('.signal-price').textContent = badgePrice;
+
+            // Update metadata
+            document.getElementById('signal-reason').textContent = data.reason || 'No reason provided';
+            
+            // Market status
+            const marketStatus = document.getElementById('market-status');
+            marketStatus.className = data.market_open ? 'market-open' : 'market-closed';
+            marketStatus.textContent = data.market_open ? '🟢 OPEN' : '🔴 CLOSED';
+
+            // Regime
+            const regimeElement = document.getElementById('market-regime');
+            let regimeClass = 'regime-neutral';
+            let regimeText = data.regime || 'Neutral';
+            
+            if (data.regime === 'uptrend') regimeClass = 'regime-uptrend';
+            else if (data.regime === 'downtrend') regimeClass = 'regime-downtrend';
+            
+            regimeElement.className = regimeClass;
+            regimeElement.textContent = `${regimeText.toUpperCase()}`;
+
+            // Last updated time
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('last-updated-time').textContent = `${hours}:${minutes}:${seconds}`;
+
+            // Trade levels
+            document.getElementById('entry-price').textContent = 
+                data.entry_price ? `₹${data.entry_price.toFixed(2)}` : '--';
+            document.getElementById('stop-price').textContent = 
+                data.stop_loss ? `₹${data.stop_loss.toFixed(2)}` : '--';
+            document.getElementById('target-price').textContent = 
+                data.target ? `₹${data.target.toFixed(2)}` : '--';
+            document.getElementById('live-price').textContent = 
+                data.live_price ? `₹${data.live_price.toFixed(2)}` : '--';
+
+            // Indicators
+            const indicators = data.indicators || {};
+            document.getElementById('ema9-value').textContent = 
+                indicators.ema9 ? `₹${indicators.ema9.toFixed(2)}` : '--';
+            document.getElementById('ema21-value').textContent = 
+                indicators.ema21 ? `₹${indicators.ema21.toFixed(2)}` : '--';
+            document.getElementById('ema50-value').textContent = 
+                indicators.ema50 ? `₹${indicators.ema50.toFixed(2)}` : '--';
+            document.getElementById('vwap-value').textContent = 
+                indicators.vwap ? `₹${indicators.vwap.toFixed(2)}` : '--';
+
+            // Conditions checklist
+            updateConditionsList(data.conditions || {});
+        }
+
+        // Update conditions checklist
+        function updateConditionsList(conditions) {
+            const conditionsList = document.getElementById('conditions-list');
+            conditionsList.innerHTML = '';
+
+            const conditionLabels = {
+                'price_above_ema9': 'Price > EMA 9',
+                'ema9_above_ema21': 'EMA 9 > EMA 21',
+                'ema21_above_ema50': 'EMA 21 > EMA 50',
+                'price_within_pullback': 'Price within EMA pullback',
+                'regime_uptrend': 'Regime is Uptrend',
+                'price_below_ema9': 'Price < EMA 9',
+                'ema9_below_ema21': 'EMA 9 < EMA 21',
+                'ema21_below_ema50': 'EMA 21 < EMA 50',
+                'regime_downtrend': 'Regime is Downtrend'
+            };
+
+            Object.keys(conditions).forEach(condKey => {
+                const condValue = conditions[condKey];
+                const label = conditionLabels[condKey] || condKey;
+                
+                const item = document.createElement('div');
+                item.className = `condition-item ${condValue ? 'condition-met' : 'condition-unmet'}`;
+                item.textContent = label;
+                
+                conditionsList.appendChild(item);
+            });
+        }
+
+        // Add signal to log
+        function addToSignalLog(data) {
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            
+            const logEntry = {
+                signal: data.signal,
+                price: data.entry_price || data.live_price,
+                time: timeStr,
+                reason: data.reason
+            };
+
+            signalLog.unshift(logEntry);
+            
+            // Keep only last 20 entries
+            if (signalLog.length > 20) {
+                signalLog.pop();
+            }
+
+            // Update display
+            updateSignalLogDisplay();
+        }
+
+        // Update signal log display
+        function updateSignalLogDisplay() {
+            const logContainer = document.getElementById('signal-log');
+            
+            if (signalLog.length === 0) {
+                logContainer.innerHTML = '<p class="log-empty">No signals yet</p>';
+                return;
+            }
+
+            logContainer.innerHTML = '';
+
+            signalLog.forEach(entry => {
+                const logItem = document.createElement('div');
+                
+                let entryClass = 'log-entry-off';
+                if (entry.signal === 'LONG') entryClass = 'log-entry-long';
+                else if (entry.signal === 'SHORT') entryClass = 'log-entry-short';
+                else if (entry.signal === 'WAIT') entryClass = 'log-entry-wait';
+
+                logItem.className = `log-entry ${entryClass}`;
+                logItem.innerHTML = `
+                    <span>${entry.signal} @ ₹${entry.price?.toFixed(2) || '--'}</span>
+                    <span class="log-entry-time">${entry.time}</span>
+                `;
+
+                logItem.title = entry.reason || '';
+                
+                logContainer.appendChild(logItem);
+            });
+        }
+
+        function initCrossNav() {
+            fetch('/api/config')
+                .then(res => res.json())
+                .then(config => {
+                    document.getElementById('nav-backtester').href = config.backtester_url;
+                    document.getElementById('nav-options').href = config.options_url;
+                })
+                .catch(() => {});
+
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                document.getElementById('cloud-warning').style.display = 'block';
+            }
+        }
+
+        initCrossNav();
+    </script>
+</body>
+</html>

@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nifty Options Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='options_style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎯 Nifty Options Assistant</h1>
+            <p class="subtitle">Weekly options buying within ₹5,000–₹8,000 budget • Paper Trading Only</p>
+        </header>
+
+        <nav class="app-nav">
+            <a href="#" id="nav-backtester" class="nav-link">📊 Backtester</a>
+            <span class="nav-separator">|</span>
+            <a href="#" id="nav-options" class="nav-link active-app">🎯 Options Tool</a>
+        </nav>
+
+        <div id="cloud-warning" class="cloud-warning" style="display:none;">
+            ☁️ <strong>Cloud mode:</strong> downloaded data resets after server restart. Click "Refresh Data" after restart. Paper trades may reset too unless exported.
+        </div>
+
+        <!-- Configuration Bar -->
+        <section class="config-bar">
+            <div class="config-grid">
+                <div class="config-item full-width">
+                    <label for="api-token">Groww API Token</label>
+                    <input type="password" id="api-token" placeholder="Enter your Groww API token" class="full-width">
+                </div>
+                <div class="config-item">
+                    <label for="budget-min">Budget Min ₹</label>
+                    <input type="number" id="budget-min" value="3000" min="1000" max="10000">
+                </div>
+                <div class="config-item">
+                    <label for="budget-max">Budget Max ₹</label>
+                    <input type="number" id="budget-max" value="7500" min="1000" max="10000">
+                </div>
+                <div class="config-item checkbox-item">
+                    <label>
+                        <input type="checkbox" id="auto-refresh-toggle" checked>
+                        ▶ Auto Refresh (5 min)
+                    </label>
+                </div>
+            </div>
+            <div class="config-actions">
+                <button id="refresh-btn" class="btn btn-primary">🔄 Refresh Signal</button>
+                <a href="#" id="nav-backtester-button" target="_blank" class="btn btn-secondary">← Backtester</a>
+            </div>
+        </section>
+
+        <!-- Status Message -->
+        <div id="status-message" class="status-message hidden"></div>
+
+        <!-- Loading Spinner -->
+        <div id="loading-spinner" class="loading-spinner hidden">
+            <div class="spinner"></div>
+            <p>Fetching live signal...</p>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="main-content" class="main-content hidden">
+            <!-- Signal + Option Card -->
+            <section class="signal-option-section">
+                <div class="signal-option-grid">
+                    <!-- Left: Underlying Signal -->
+                    <div class="signal-card">
+                        <h2>Underlying Signal</h2>
+                        
+                        <div id="signal-badge" class="signal-badge signal-off">
+                            <div class="badge-content">
+                                <div class="badge-signal">WAITING</div>
+                                <div class="badge-price">₹--</div>
+                            </div>
+                        </div>
+
+                        <div class="signal-meta">
+                            <div class="meta-row">
+                                <span class="label">Nifty Price:</span>
+                                <span class="value" id="nifty-price">--</span>
+                            </div>
+                            <div class="meta-row">
+                                <span class="label">Regime:</span>
+                                <span class="value regime-badge" id="regime-badge">--</span>
+                            </div>
+                            <div class="meta-row">
+                                <span class="label">Reason:</span>
+                                <span class="value" id="signal-reason">--</span>
+                            </div>
+                        </div>
+
+                        <!-- Condition Checklist -->
+                        <div class="conditions-section">
+                            <h3>Signal Conditions</h3>
+                            <div id="conditions-list" class="conditions-list">
+                                <!-- Dynamically populated -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Recommended Option -->
+                    <div class="option-card">
+                        <h2>Recommended Option</h2>
+                        <div id="option-details" class="option-details">
+                            <p class="no-signal">No actionable signal yet</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Open Trade Monitor -->
+            <section id="open-trade-section" class="open-trade-section hidden">
+                <h2>📊 Open Trade Monitor</h2>
+                
+                <div class="trade-monitor-content">
+                    <div class="trade-header">
+                        <div class="trade-symbol">
+                            <span class="label">Symbol:</span>
+                            <span id="trade-symbol-display" class="value">--</span>
+                        </div>
+                        <div class="trade-entry">
+                            <span class="label">Entry Premium:</span>
+                            <span id="trade-entry-display" class="value">₹--</span>
+                        </div>
+                        <div class="trade-current">
+                            <span class="label">Current Premium:</span>
+                            <span id="trade-current-display" class="value">₹--</span>
+                        </div>
+                    </div>
+
+                    <div class="trade-pnl">
+                        <div class="pnl-card">
+                            <div class="pnl-amount" id="trade-pnl-amount">₹--</div>
+                            <div class="pnl-pct" id="trade-pnl-pct">--%</div>
+                        </div>
+                        <div class="pnl-progress">
+                            <div class="progress-bar">
+                                <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+                                <div class="progress-stop" id="progress-stop-pos" style="left: 0%"></div>
+                                <div class="progress-target" id="progress-target-pos" style="left: 100%"></div>
+                            </div>
+                            <div class="progress-labels">
+                                <span id="progress-stop-label">STOP --</span>
+                                <span id="progress-current-label">CURRENT --</span>
+                                <span id="progress-target-label">TARGET --</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="exit-warning" class="exit-warning hidden">
+                        <div class="warning-content">
+                            <strong id="warning-title">⚠️ Auto-Exit Triggered</strong>
+                            <p id="warning-message">Trade has reached exit condition</p>
+                        </div>
+                    </div>
+
+                    <div class="exit-buttons">
+                        <button id="close-target-btn" class="btn btn-success">✅ Close — Target</button>
+                        <button id="close-stop-btn" class="btn btn-danger">❌ Close — Stop Loss</button>
+                        <button id="close-manual-btn" class="btn btn-secondary">🚪 Close — Manual</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Paper Trade Summary -->
+            <section class="summary-section">
+                <h2>📈 Paper Trade Summary</h2>
+                
+                <div class="summary-metrics">
+                    <div class="metric">
+                        <span class="metric-label">Total Trades</span>
+                        <span class="metric-value" id="metric-total">0</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Wins</span>
+                        <span class="metric-value wins" id="metric-wins">0</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Losses</span>
+                        <span class="metric-value losses" id="metric-losses">0</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Win Rate %</span>
+                        <span class="metric-value" id="metric-winrate">0%</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Total P&L</span>
+                        <span class="metric-value" id="metric-pnl">₹0</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Avg Win</span>
+                        <span class="metric-value wins" id="metric-avgwin">₹0</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Avg Loss</span>
+                        <span class="metric-value losses" id="metric-avgloss">₹0</span>
+                    </div>
+                </div>
+
+                <!-- Trade Log Table -->
+                <div class="trade-log-container">
+                    <table class="trade-log-table">
+                        <thead>
+                            <tr>
+                                <th>Date/Time</th>
+                                <th>Symbol</th>
+                                <th>Dir</th>
+                                <th>Entry ₹</th>
+                                <th>Exit ₹</th>
+                                <th>P&L ₹</th>
+                                <th>P&L %</th>
+                                <th>Status</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trade-log-tbody">
+                            <tr>
+                                <td colspan="9" style="text-align: center; color: #8888aa; padding: 20px;">
+                                    No trades yet
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let autoRefreshActive = true;
+        let autoRefreshInterval = null;
+        const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+            loadInitialState();
+        });
+
+        // Event listeners
+        function setupEventListeners() {
+            document.getElementById('refresh-btn').addEventListener('click', refreshSignal);
+            document.getElementById('auto-refresh-toggle').addEventListener('change', toggleAutoRefresh);
+            
+            document.getElementById('close-target-btn').addEventListener('click', closeTradeTarget);
+            document.getElementById('close-stop-btn').addEventListener('click', closeTradeSop);
+            document.getElementById('close-manual-btn').addEventListener('click', closeTradeManual);
+        }
+
+        // Load initial state
+        function loadInitialState() {
+            const savedConfig = localStorage.getItem('optionsConfig');
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                document.getElementById('budget-min').value = config.budget_min || 3000;
+                document.getElementById('budget-max').value = config.budget_max || 7500;
+                document.getElementById('auto-refresh-toggle').checked = config.auto_refresh !== false;
+            }
+        }
+
+        // Refresh signal
+        async function refreshSignal() {
+            const token = document.getElementById('api-token').value.trim();
+            if (!token) {
+                showStatus('⚠️ Please enter your Groww API token', 'warning');
+                return;
+            }
+
+            showLoading(true);
+            clearStatus();
+
+            try {
+                const response = await fetch('/api/options-signal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        api_token: token,
+                        budget_min: parseFloat(document.getElementById('budget-min').value),
+                        budget_max: parseFloat(document.getElementById('budget-max').value)
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to fetch signal');
+                }
+
+                const data = await response.json();
+                updateUIWithSignal(data);
+                updateTradeStatus(token, data);
+                updateTradeLog();
+
+                // Save config
+                localStorage.setItem('optionsConfig', JSON.stringify({
+                    budget_min: parseFloat(document.getElementById('budget-min').value),
+                    budget_max: parseFloat(document.getElementById('budget-max').value),
+                    auto_refresh: document.getElementById('auto-refresh-toggle').checked
+                }));
+
+                document.getElementById('main-content').classList.remove('hidden');
+                showStatus('✅ Signal updated', 'success');
+
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus(`❌ ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Update UI with signal data
+        function updateUIWithSignal(data) {
+            // Signal badge
+            const badge = document.getElementById('signal-badge');
+            const badgeSignal = document.querySelector('.badge-signal');
+            const badgePrice = document.querySelector('.badge-price');
+
+            badge.className = 'signal-badge';
+            if (data.underlying_signal === 'LONG') {
+                badge.classList.add('signal-long');
+                badgeSignal.textContent = 'LONG ↑';
+                badgePrice.textContent = data.recommended_option ? `₹${data.recommended_option.premium.toFixed(2)}` : `₹${data.nifty_price.toFixed(2)}`;
+            } else if (data.underlying_signal === 'SHORT') {
+                badge.classList.add('signal-short');
+                badgeSignal.textContent = 'SHORT ↓';
+                badgePrice.textContent = data.recommended_option ? `₹${data.recommended_option.premium.toFixed(2)}` : `₹${data.nifty_price.toFixed(2)}`;
+            } else if (data.underlying_signal === 'WAIT') {
+                badge.classList.add('signal-wait');
+                badgeSignal.textContent = 'WAITING';
+                badgePrice.textContent = `₹${data.nifty_price.toFixed(2)}`;
+            } else {
+                badge.classList.add('signal-off');
+                badgeSignal.textContent = 'OFF';
+                badgePrice.textContent = `₹${data.nifty_price.toFixed(2)}`;
+            }
+
+            // Nifty price
+            document.getElementById('nifty-price').textContent = `₹${data.nifty_price.toFixed(2)}`;
+
+            // Regime
+            const regimeBadge = document.getElementById('regime-badge');
+            regimeBadge.textContent = data.regime ? data.regime.toUpperCase() : 'UNKNOWN';
+            regimeBadge.className = 'regime-badge';
+            if (data.regime === 'uptrend') regimeBadge.classList.add('uptrend');
+            else if (data.regime === 'downtrend') regimeBadge.classList.add('downtrend');
+            else regimeBadge.classList.add('neutral');
+
+            // Signal reason
+            document.getElementById('signal-reason').textContent = data.signal_reason || '--';
+
+            // Conditions
+            updateConditionsList(data.conditions || {});
+
+            // Recommended option
+            updateOptionDisplay(data.recommended_option, data.underlying_signal);
+        }
+
+        // Update conditions list
+        function updateConditionsList(conditions) {
+            const list = document.getElementById('conditions-list');
+            list.innerHTML = '';
+
+            const conditionLabels = {
+                'price_above_ema9': 'Price > EMA 9',
+                'ema9_above_ema21': 'EMA 9 > EMA 21',
+                'ema21_above_ema50': 'EMA 21 > EMA 50',
+                'price_within_pullback': 'Price within pullback',
+                'regime_uptrend': 'Regime is UPTREND',
+                'price_below_ema9': 'Price < EMA 9',
+                'ema9_below_ema21': 'EMA 9 < EMA 21',
+                'ema21_below_ema50': 'EMA 21 < EMA 50',
+                'regime_downtrend': 'Regime is DOWNTREND'
+            };
+
+            Object.keys(conditions).forEach(key => {
+                const item = document.createElement('div');
+                item.className = `condition-item ${conditions[key] ? 'met' : 'unmet'}`;
+                item.innerHTML = `
+                    <span class="condition-check">${conditions[key] ? '✓' : '✕'}</span>
+                    <span class="condition-label">${conditionLabels[key] || key}</span>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // Update option display
+        function updateOptionDisplay(option, signal) {
+            const container = document.getElementById('option-details');
+
+            if (!option) {
+                container.innerHTML = '<p class="no-signal">No actionable signal yet</p>';
+                return;
+            }
+
+            const borderColor = signal === 'LONG' ? 'long' : 'short';
+            container.className = `option-display border-${borderColor}`;
+            container.innerHTML = `
+                <div class="option-header">
+                    <div class="option-symbol">${option.trading_symbol || 'N/A'}</div>
+                    <div class="option-expiry">${option.days_to_expiry} days to expiry</div>
+                </div>
+                
+                <div class="option-strike">
+                    <span class="strike-price">Strike ${option.strike}</span>
+                    <span class="strike-type">${option.option_type}</span>
+                    <span class="moneyness">${option.moneyness}</span>
+                </div>
+
+                <div class="option-pricing">
+                    <div class="price-row">
+                        <span class="label">Current Premium:</span>
+                        <span class="value">₹${option.premium.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row">
+                        <span class="label">Lot Cost (1 lot × 50):</span>
+                        <span class="value">₹${option.lot_cost.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row">
+                        <span class="label">Max Loss (full premium):</span>
+                        <span class="value loss">-₹${option.max_loss.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div class="option-levels">
+                    <div class="level stop-level">
+                        <span class="label">Stop Loss Premium</span>
+                        <span class="value">₹${option.stop_premium.toFixed(2)}</span>
+                        <span class="pnl loss">Loss: -₹${Math.abs(option.stop_pnl).toFixed(2)}</span>
+                    </div>
+                    <div class="level target-level">
+                        <span class="label">Target Premium (+80%)</span>
+                        <span class="value">₹${option.target_premium.toFixed(2)}</span>
+                        <span class="pnl profit">Profit: +₹${option.target_pnl.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div class="option-greeks">
+                    <div class="greek">
+                        <span class="label">Delta</span>
+                        <span class="value">${option.delta.toFixed(4)}</span>
+                    </div>
+                    <div class="greek">
+                        <span class="label">IV</span>
+                        <span class="value">${option.iv.toFixed(2)}%</span>
+                    </div>
+                </div>
+
+                <div class="option-disclaimer">
+                    ℹ️ This is PAPER TRADING only. Execute manually on your broker app.
+                </div>
+
+                <button class="btn btn-primary btn-log-trade" onclick="logPaperTrade('${option.trading_symbol}', ${option.premium}, '${option.strike}', '${option.option_type}', '${option.expiry}', ${option.target_premium}, ${option.stop_premium}, '${signal}')">
+                    📋 Log Paper Trade
+                </button>
+            `;
+        }
+
+        // Log paper trade
+        async function logPaperTrade(symbol, premium, strike, type, expiry, target, stop, signal) {
+            const token = document.getElementById('api-token').value.trim();
+            if (!token) {
+                showStatus('❌ API token required', 'error');
+                return;
+            }
+
+            if (confirm(`Log paper trade:\n${symbol} @ ₹${premium.toFixed(2)}\nTarget: ₹${target.toFixed(2)}\nStop: ₹${stop.toFixed(2)}?`)) {
+                try {
+                    const response = await fetch('/api/paper-trade/open', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            option_details: {
+                                trading_symbol: symbol,
+                                premium: premium,
+                                strike: parseInt(strike),
+                                option_type: type,
+                                expiry: expiry,
+                                target_premium: target,
+                                stop_premium: stop,
+                                lot_cost: premium * 50,
+                                max_loss: premium * 50,
+                                target_pnl: (target - premium) * 50,
+                                stop_pnl: (stop - premium) * 50,
+                                delta: 0,
+                                iv: 0,
+                                moneyness: 'OTM',
+                                days_to_expiry: 1
+                            },
+                            signal_direction: signal,
+                            nifty_price: parseFloat(document.getElementById('nifty-price').textContent.replace('₹', ''))
+                        })
+                    });
+
+                    if (response.ok) {
+                        showStatus('✅ Paper trade logged', 'success');
+                        setTimeout(refreshSignal, 1000);
+                    } else {
+                        const error = await response.json();
+                        showStatus(`❌ ${error.error}`, 'error');
+                    }
+                } catch (error) {
+                    showStatus(`❌ Error: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        // Update trade status
+        async function updateTradeStatus(token, signal) {
+            try {
+                const response = await fetch('/api/paper-trade/status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_token: token })
+                });
+
+                if (!response.ok) throw new Error('Failed to fetch trade status');
+                
+                const data = await response.json();
+
+                if (data.has_open_trade) {
+                    displayOpenTrade(data.trade, data.current_premium, data.exit_check);
+                } else {
+                    document.getElementById('open-trade-section').classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('Error updating trade status:', error);
+            }
+        }
+
+        // Display open trade
+        function displayOpenTrade(trade, currentPremium, exitCheck) {
+            const section = document.getElementById('open-trade-section');
+            section.classList.remove('hidden');
+
+            document.getElementById('trade-symbol-display').textContent = trade.trading_symbol || '--';
+            document.getElementById('trade-entry-display').textContent = `₹${trade.entry_premium.toFixed(2)}`;
+            document.getElementById('trade-current-display').textContent = currentPremium ? `₹${currentPremium.toFixed(2)}` : '₹--';
+
+            if (currentPremium && exitCheck) {
+                const pnlPerLot = (currentPremium - parseFloat(trade.entry_premium)) * 50;
+                const pnlPct = ((currentPremium - parseFloat(trade.entry_premium)) / parseFloat(trade.entry_premium)) * 100;
+
+                document.getElementById('trade-pnl-amount').textContent = `₹${pnlPerLot.toFixed(2)}`;
+                document.getElementById('trade-pnl-pct').textContent = `${pnlPct > 0 ? '+' : ''}${pnlPct.toFixed(2)}%`;
+                document.getElementById('trade-pnl-amount').style.color = pnlPerLot >= 0 ? '#00ff88' : '#ff4455';
+
+                // Progress bar
+                const stopPrem = parseFloat(trade.stop_premium);
+                const targetPrem = parseFloat(trade.target_premium);
+                const entryPrem = parseFloat(trade.entry_premium);
+                const range = targetPrem - stopPrem;
+                const position = Math.max(0, Math.min(100, ((currentPremium - stopPrem) / range) * 100));
+
+                document.getElementById('progress-fill').style.width = `${position}%`;
+                document.getElementById('progress-stop-pos').style.left = '0%';
+                document.getElementById('progress-target-pos').style.left = '100%';
+                document.getElementById('progress-stop-label').textContent = `STOP ₹${stopPrem.toFixed(2)}`;
+                document.getElementById('progress-current-label').textContent = `CURRENT ₹${currentPremium.toFixed(2)}`;
+                document.getElementById('progress-target-label').textContent = `TARGET ₹${targetPrem.toFixed(2)}`;
+
+                // Exit warning
+                if (exitCheck.should_exit) {
+                    const warningDiv = document.getElementById('exit-warning');
+                    warningDiv.classList.remove('hidden');
+                    document.getElementById('warning-title').textContent = '⚠️ Auto-Exit Triggered';
+                    document.getElementById('warning-message').textContent = exitCheck.reason;
+                } else {
+                    document.getElementById('exit-warning').classList.add('hidden');
+                }
+            }
+        }
+
+        // Close trade functions
+        async function closeTradeTarget() {
+            const trade = await getOpenTrade();
+            if (trade) {
+                await closeTrade(trade.trade_id, parseFloat(trade.target_premium), 'TARGET');
+            }
+        }
+
+        async function closeTradeSop() {
+            const trade = await getOpenTrade();
+            if (trade) {
+                await closeTrade(trade.trade_id, parseFloat(trade.stop_premium), 'STOP');
+            }
+        }
+
+        async function closeTradeManual() {
+            const price = prompt('Enter exit premium (₹):');
+            if (price) {
+                const trade = await getOpenTrade();
+                if (trade) {
+                    await closeTrade(trade.trade_id, parseFloat(price), 'MANUAL');
+                }
+            }
+        }
+
+        async function getOpenTrade() {
+            try {
+                const response = await fetch('/api/paper-trade/summary');
+                const data = await response.json();
+                return data.summary.open_trade;
+            } catch (error) {
+                console.error('Error:', error);
+                return null;
+            }
+        }
+
+        async function closeTrade(tradeId, exitPremium, reason) {
+            try {
+                const response = await fetch('/api/paper-trade/close', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        trade_id: tradeId,
+                        exit_premium: exitPremium,
+                        exit_reason: reason
+                    })
+                });
+
+                if (response.ok) {
+                    showStatus('✅ Trade closed', 'success');
+                    setTimeout(() => {
+                        document.getElementById('open-trade-section').classList.add('hidden');
+                        updateTradeLog();
+                    }, 500);
+                } else {
+                    const error = await response.json();
+                    showStatus(`❌ ${error.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Update trade log
+        async function updateTradeLog() {
+            try {
+                const response = await fetch('/api/paper-trade/summary');
+                const data = await response.json();
+                const summary = data.summary;
+                const trades = data.trades;
+
+                // Update metrics
+                document.getElementById('metric-total').textContent = summary.total_trades;
+                document.getElementById('metric-wins').textContent = summary.wins;
+                document.getElementById('metric-losses').textContent = summary.losses;
+                document.getElementById('metric-winrate').textContent = `${summary.win_rate_pct}%`;
+                document.getElementById('metric-pnl').textContent = `₹${summary.total_pnl.toFixed(2)}`;
+                document.getElementById('metric-avgwin').textContent = `₹${summary.avg_win.toFixed(2)}`;
+                document.getElementById('metric-avgloss').textContent = `₹${summary.avg_loss.toFixed(2)}`;
+
+                // Update table
+                const tbody = document.getElementById('trade-log-tbody');
+                if (trades.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #8888aa; padding: 20px;">No trades yet</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                trades.forEach(trade => {
+                    const row = document.createElement('tr');
+                    const pnlPerLot = parseFloat(trade.pnl_per_lot) || 0;
+                    const statusClass = trade.status === 'OPEN' ? 'open' : (pnlPerLot > 0 ? 'win' : 'loss');
+
+                    row.className = `trade-row ${statusClass}`;
+                    row.innerHTML = `
+                        <td>${trade.entry_time}</td>
+                        <td>${trade.trading_symbol}</td>
+                        <td>${trade.signal_direction}</td>
+                        <td>₹${parseFloat(trade.entry_premium).toFixed(2)}</td>
+                        <td>${trade.exit_premium ? `₹${parseFloat(trade.exit_premium).toFixed(2)}` : '--'}</td>
+                        <td style="color: ${pnlPerLot > 0 ? '#00ff88' : '#ff4455'}">${pnlPerLot > 0 ? '+' : ''}₹${pnlPerLot.toFixed(2)}</td>
+                        <td style="color: ${pnlPerLot > 0 ? '#00ff88' : '#ff4455'}">${pnlPerLot > 0 ? '+' : ''}${parseFloat(trade.pnl_pct).toFixed(2)}%</td>
+                        <td>${trade.status}</td>
+                        <td>${trade.exit_reason || '--'}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error updating trade log:', error);
+            }
+        }
+
+        // Auto refresh
+        function toggleAutoRefresh(e) {
+            autoRefreshActive = e.target.checked;
+            if (autoRefreshActive) {
+                startAutoRefresh();
+            } else {
+                if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+            }
+        }
+
+        function startAutoRefresh() {
+            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+            autoRefreshInterval = setInterval(() => {
+                if (document.getElementById('api-token').value.trim()) {
+                    refreshSignal();
+                }
+            }, REFRESH_INTERVAL);
+        }
+
+        if (document.getElementById('auto-refresh-toggle').checked) {
+            startAutoRefresh();
+        }
+
+        // Utility functions
+        function showLoading(show) {
+            document.getElementById('loading-spinner').classList.toggle('hidden', !show);
+        }
+
+        function showStatus(msg, type) {
+            const status = document.getElementById('status-message');
+            status.textContent = msg;
+            status.className = `status-message ${type}`;
+            status.classList.remove('hidden');
+            setTimeout(() => status.classList.add('hidden'), 5000);
+        }
+
+        function clearStatus() {
+            document.getElementById('status-message').classList.add('hidden');
+        }
+
+        function initCrossNav() {
+            fetch('/api/config')
+                .then(res => res.json())
+                .then(config => {
+                    document.getElementById('nav-backtester').href = config.backtester_url;
+                    document.getElementById('nav-options').href = config.options_url;
+                    document.getElementById('nav-backtester-button').href = config.backtester_url;
+                })
+                .catch(() => {});
+
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                document.getElementById('cloud-warning').style.display = 'block';
+            }
+        }
+
+        initCrossNav();
+    </script>
+</body>
+</html>
