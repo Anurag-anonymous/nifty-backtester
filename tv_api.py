@@ -9,9 +9,14 @@ Uses tvdatafeed library: https://github.com/rongardF/tvdatafeed
 
 import pandas as pd
 from datetime import datetime, timedelta
-from tvDatafeed import TvDatafeed, Interval
 import os
 from pathlib import Path
+
+try:
+    from tvDatafeed import TvDatafeed, Interval
+    TVDATAFEED_AVAILABLE = True
+except ImportError:
+    TVDATAFEED_AVAILABLE = False
 
 
 # ============================================================================
@@ -43,6 +48,9 @@ def get_tv_connection():
     TvDatafeed
         TradingView data feed object
     """
+    if not TVDATAFEED_AVAILABLE:
+        raise ImportError("tvdatafeed library is not available")
+    
     if TV_USERNAME and TV_PASSWORD:
         print("📡 Connecting to TradingView with login credentials...")
         tv = TvDatafeed(username=TV_USERNAME, password=TV_PASSWORD)
@@ -80,6 +88,10 @@ def fetch_nifty_data_from_tv(start_date=None, end_date=None, n_bars=500, interva
     ValueError
         If fetch fails or data format is unexpected
     """
+    
+    if not TVDATAFEED_AVAILABLE:
+        raise ValueError("TradingView data fetching is only available when running locally. "
+                         "On cloud: use the CSV upload feature or click Refresh Data to use yfinance.")
     
     # Map interval minutes to TvDatafeed Interval enum
     interval_map = {
