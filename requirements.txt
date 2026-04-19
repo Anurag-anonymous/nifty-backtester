@@ -7,5 +7,5 @@ plotly==5.18.0
 gunicorn==21.2.0
 pytz==2024.1
 requests==2.31.0
-tvdatafeed==2.0.1
 growwapi
+tvdatafeed @ git+https://github.com/StreamAlpha/tvdatafeed.git
