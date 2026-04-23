@@ -233,18 +233,20 @@
         // Global state
         let autoRefreshActive = true;
         let autoRefreshInterval = null;
-        const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+        const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes (changed from 5)
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             setupEventListeners();
             loadInitialState();
+            loadSavedToken();  // New: Load token from localStorage
         });
 
         // Event listeners
         function setupEventListeners() {
             document.getElementById('refresh-btn').addEventListener('click', refreshSignal);
             document.getElementById('auto-refresh-toggle').addEventListener('change', toggleAutoRefresh);
+            document.getElementById('api-token').addEventListener('change', saveTokenOnChange);  // NEW
             
             document.getElementById('close-target-btn').addEventListener('click', closeTradeTarget);
             document.getElementById('close-stop-btn').addEventListener('click', closeTradeSop);
@@ -259,6 +261,58 @@
                 document.getElementById('budget-min').value = config.budget_min || 3000;
                 document.getElementById('budget-max').value = config.budget_max || 7500;
                 document.getElementById('auto-refresh-toggle').checked = config.auto_refresh !== false;
+            }
+        }
+
+        // Load token from localStorage (NEW)
+        function loadSavedToken() {
+            const savedToken = localStorage.getItem('upstoxToken');
+            if (savedToken) {
+                document.getElementById('api-token').value = savedToken;
+                console.log('✅ Upstox token loaded from storage');
+            }
+        }
+
+        // Save token when entered (NEW)
+        function saveTokenOnChange() {
+            const token = document.getElementById('api-token').value.trim();
+            if (token) {
+                localStorage.setItem('upstoxToken', token);
+                console.log('💾 Token saved to localStorage');
+            }
+        }
+
+        // Save trade entry when conditions are met (NEW)
+        async function saveTradeEntry(signal, entryPrice, targetPrice, stopLossPrice, indicators) {
+            if (signal !== 'LONG' && signal !== 'SHORT') {
+                return;  // Only save for actionable signals
+            }
+
+            try {
+                const response = await fetch('/api/trade-entry/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        entry_type: signal,
+                        entry_price: entryPrice,
+                        target_price: targetPrice,
+                        stop_loss_price: stopLossPrice,
+                        nifty_price: entryPrice,
+                        ema9: indicators.ema9,
+                        ema21: indicators.ema21,
+                        vwap: indicators.vwap
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('✅ Trade entry saved:', data.trade);
+                } else {
+                    const error = await response.json();
+                    console.error('❌ Failed to save trade entry:', error);
+                }
+            } catch (error) {
+                console.error('Error saving trade entry:', error);
             }
         }
 
@@ -324,10 +378,36 @@
                 badge.classList.add('signal-long');
                 badgeSignal.textContent = 'LONG ↑';
                 badgePrice.textContent = data.recommended_option ? `₹${data.recommended_option.premium.toFixed(2)}` : `₹${data.nifty_price.toFixed(2)}`;
+                
+                // NEW: Save trade entry when LONG signal is generated
+                if (data.recommended_option) {
+                    const stopLoss = data.nifty_price - 20;  // Default 20 points SL
+                    const target = data.nifty_price + (data.nifty_price - stopLoss) * 2;  // 2:1 RR
+                    saveTradeEntry(
+                        'LONG',
+                        data.nifty_price,
+                        target,
+                        stopLoss,
+                        data.indicators || {}
+                    );
+                }
             } else if (data.underlying_signal === 'SHORT') {
                 badge.classList.add('signal-short');
                 badgeSignal.textContent = 'SHORT ↓';
                 badgePrice.textContent = data.recommended_option ? `₹${data.recommended_option.premium.toFixed(2)}` : `₹${data.nifty_price.toFixed(2)}`;
+                
+                // NEW: Save trade entry when SHORT signal is generated
+                if (data.recommended_option) {
+                    const stopLoss = data.nifty_price + 20;  // Default 20 points SL
+                    const target = data.nifty_price - (stopLoss - data.nifty_price) * 2;  // 2:1 RR
+                    saveTradeEntry(
+                        'SHORT',
+                        data.nifty_price,
+                        target,
+                        stopLoss,
+                        data.indicators || {}
+                    );
+                }
             } else if (data.underlying_signal === 'WAIT') {
                 badge.classList.add('signal-wait');
                 badgeSignal.textContent = 'WAITING';

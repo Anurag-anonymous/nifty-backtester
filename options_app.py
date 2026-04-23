@@ -239,6 +239,126 @@ def paper_trade_summary():
         return jsonify({'error': str(e)}), 500
 
 
+# ============================================================================
+# NEW TRADE PERSISTENCE ENDPOINTS
+# ============================================================================
+
+@app.route('/api/trade-entry/save', methods=['POST'])
+def save_trade_entry():
+    """
+    Save a trade entry when long/short conditions are met.
+    
+    Request body:
+    {
+      "entry_type": "LONG" | "SHORT",
+      "entry_price": float,
+      "target_price": float,
+      "stop_loss_price": float,
+      "nifty_price": float (optional),
+      "ema9": float (optional),
+      "ema21": float (optional),
+      "vwap": float (optional)
+    }
+    """
+    try:
+        from trade_persistence import save_trade_entry
+        
+        data = request.get_json()
+        trade = save_trade_entry(
+            entry_type=data.get('entry_type'),
+            entry_price=data.get('entry_price'),
+            target_price=data.get('target_price'),
+            stop_loss_price=data.get('stop_loss_price'),
+            nifty_price=data.get('nifty_price'),
+            ema9=data.get('ema9'),
+            ema21=data.get('ema21'),
+            vwap=data.get('vwap')
+        )
+        
+        if trade:
+            return jsonify({'success': True, 'trade': trade})
+        return jsonify({'success': False, 'error': 'Failed to save trade'}), 500
+    except Exception as e:
+        print(f"Error saving trade entry: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trade-entry/load', methods=['GET'])
+def load_trade_entries():
+    """Load all saved trade entries (active and closed)."""
+    try:
+        from trade_persistence import load_active_trades
+        
+        trades = load_active_trades()
+        return jsonify({'trades': trades})
+    except Exception as e:
+        print(f"Error loading trade entries: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trade-entry/pending', methods=['GET'])
+def get_pending_trades():
+    """Get all trades with ACTIVE status."""
+    try:
+        from trade_persistence import get_pending_trades
+        
+        trades = get_pending_trades()
+        return jsonify({'pending_trades': trades, 'count': len(trades)})
+    except Exception as e:
+        print(f"Error getting pending trades: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/token/save', methods=['POST'])
+def save_upstox_token():
+    """
+    Save Upstox access token for next session.
+    
+    Request body: { "access_token": str }
+    """
+    try:
+        data = request.get_json()
+        token = data.get('access_token', '').strip()
+        
+        if not token:
+            return jsonify({'error': 'Token required'}), 400
+        
+        # Store in secure session/storage
+        # For now, save to a file in /tmp (cloud) or data dir (local)
+        token_dir = '/tmp' if os.getenv('RENDER') else os.path.join(os.path.dirname(__file__), 'data')
+        os.makedirs(token_dir, exist_ok=True)
+        
+        token_file = os.path.join(token_dir, '.upstox_token')
+        try:
+            with open(token_file, 'w') as f:
+                f.write(token)
+            return jsonify({'success': True, 'message': 'Token saved'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/token/load', methods=['GET'])
+def load_upstox_token():
+    """Load saved Upstox access token."""
+    try:
+        token_dir = '/tmp' if os.getenv('RENDER') else os.path.join(os.path.dirname(__file__), 'data')
+        token_file = os.path.join(token_dir, '.upstox_token')
+        
+        if os.path.exists(token_file):
+            try:
+                with open(token_file, 'r') as f:
+                    token = f.read().strip()
+                return jsonify({'token': token if token else None})
+            except Exception as e:
+                return jsonify({'token': None, 'error': str(e)})
+        
+        return jsonify({'token': None})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("=" * 60)
     print("🎯 Nifty Options Paper Trading Tool")
